@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Volfied-like Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game settings
+        const gridSize = 20;
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+
+        // Player properties
+        let player = {
+            x: 0,
+            y: 0,
+            speed: 5,
+            drawing: false,
+            path: []
+        };
+
+        // Enemy properties
+        let enemy = {
+            x: canvasWidth / 2,
+            y: canvasHeight / 2,
+            speed: 2,
+            dx: 2,
+            dy: 2
+        };
+
+        // Territory (initially the edges)
+        let territory = [
+            { x: 0, y: 0, width: canvasWidth, height: 20 }, // Top edge
+            { x: 0, y: canvasHeight - 20, width: canvasWidth, height: 20 }, // Bottom edge
+            { x: 0, y: 0, width: 20, height: canvasHeight }, // Left edge
+            { x: canvasWidth - 20, y: 0, width: 20, height: canvasHeight } // Right edge
+        ];
+
+        // Keyboard controls
+        let keys = {};
+        document.addEventListener('keydown', (e) => keys[e.key] = true);
+        document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Check if a point is in the territory
+        function isInTerritory(x, y) {
+            return territory.some(t => 
+                x >= t.x && x <= t.x + t.width && 
+                y >= t.y && y <= t.y + t.height
+            );
+        }
+
+        // Move the player
+        function movePlayer() {
+            let newX = player.x;
+            let newY = player.y;
+
+            if (keys['ArrowUp']) newY -= player.speed;
+            if (keys['ArrowDown']) newY += player.speed;
+            if (keys['ArrowLeft']) newX -= player.speed;
+            if (keys['ArrowRight']) newX += player.speed;
+
+            // Keep player within canvas bounds
+            newX = Math.max(0, Math.min(canvasWidth - gridSize, newX));
+            newY = Math.max(0, Math.min(canvasHeight - gridSize, newY));
+
+            // Start drawing when leaving territory
+            if (!player.drawing && !isInTerritory(newX, newY)) {
+                player.drawing = true;
+                player.path = [{ x: player.x, y: player.y }];
+            }
+
+            // Update position and path
+            if (player.drawing) {
+                player.path.push({ x: newX, y: newY });
+            }
+            player.x = newX;
+            player.y = newY;
+
+            // Complete path when returning to territory
+            if (player.drawing && isInTerritory(player.x, player.y)) {
+                completePath();
+            }
+        }
+
+        // Move the enemy
+        function moveEnemy() {
+            enemy.x += enemy.dx;
+            enemy.y += enemy.dy;
+
+            // Bounce off territory
+            territory.forEach(t => {
+                if (enemy.x < t.x + t.width && enemy.x + gridSize > t.x &&
+                    enemy.y < t.y + t.height && enemy.y + gridSize > t.y) {
+                    if (enemy.x < t.x + t.width / 2) enemy.dx = -Math.abs(enemy.dx);
+                    else enemy.dx = Math.abs(enemy.dx);
+                    if (enemy.y < t.y + t.height / 2) enemy.dy = -Math.abs(enemy.dy);
+                    else enemy.dy = Math.abs(enemy.dy);
+                }
+            });
+
+            // Keep enemy within canvas bounds
+            if (enemy.x <= 0 || enemy.x >= canvasWidth - gridSize) enemy.dx *= -1;
+            if (enemy.y <= 0 || enemy.y >= canvasHeight - gridSize) enemy.dy *= -1;
+        }
+
+        // Check for collision between enemy and player's path
+        function checkCollision() {
+            if (player.drawing) {
+                for (let point of player.path) {
+                    if (Math.abs(enemy.x - point.x) < gridSize && 
+                        Math.abs(enemy.y - point.y) < gridSize) {
+                        alert('Game Over! Enemy hit your path.');
+                        resetGame();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Complete the path and update territory
+        function completePath() {
+            player.drawing = false;
+            let minX = Math.min(...player.path.map(p => p.x));
+            let maxX = Math.max(...player.path.map(p => p.x));
+            let minY = Math.min(...player.path.map(p => p.y));
+            let maxY = Math.max(...player.path.map(p => p.y));
+
+            // Add new territory as a rectangle
+            territory.push({
+                x: minX,
+                y: minY,
+                width: maxX - minX + gridSize,
+                height: maxY - minY + gridSize
+            });
+
+            player.path = [];
+            checkWinCondition();
+        }
+
+        // Check win condition (enemy trapped)
+        function checkWinCondition() {
+            let enemyArea = 0;
+            for (let y = 0; y < canvasHeight; y += gridSize) {
+                for (let x = 0; x < canvasWidth; x += gridSize) {
+                    if (!isInTerritory(x, y)) enemyArea += gridSize * gridSize;
+                }
+            }
+            if (enemyArea < canvasWidth * canvasHeight * 0.2) { // Less than 20% free space
+                alert('You Win! Enemy trapped.');
+                resetGame();
+            }
+        }
+
+        // Reset the game
+        function resetGame() {
+            player = { x: 0, y: 0, speed: 5, drawing: false, path: [] };
+            enemy = { x: canvasWidth / 2, y: canvasHeight / 2, speed: 2, dx: 2, dy: 2 };
+            territory = [
+                { x: 0, y: 0, width: canvasWidth, height: 20 },
+                { x: 0, y: canvasHeight - 20, width: canvasWidth, height: 20 },
+                { x: 0, y: 0, width: 20, height: canvasHeight },
+                { x: canvasWidth - 20, y: 0, width: 20, height: canvasHeight }
+            ];
+        }
+
+        // Draw the game
+        function draw() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            // Draw territory
+            ctx.fillStyle = 'gray';
+            territory.forEach(t => ctx.fillRect(t.x, t.y, t.width, t.height));
+
+            // Draw player
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.x, player.y, gridSize, gridSize);
+
+            // Draw path if drawing
+            if (player.drawing) {
+                ctx.strokeStyle = 'blue';
+                ctx.beginPath();
+                ctx.moveTo(player.path[0].x, player.path[0].y);
+                for (let point of player.path) {
+                    ctx.lineTo(point.x, point.y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw enemy
+            ctx.fillStyle = 'red';
+            ctx.fillRect(enemy.x, enemy.y, gridSize, gridSize);
+        }
+
+        // Game loop
+        function gameLoop() {
+            movePlayer();
+            moveEnemy();
+            if (!checkCollision()) {
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
